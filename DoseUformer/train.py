@@ -3,12 +3,12 @@ import os
 import sys
 
 import torch
+import yaml
+from monai.utils import set_determinism
 
-# from monai.utils import set_determinism
+# from attrdict import AttrDict
 if os.path.abspath('..') not in sys.path:
     sys.path.insert(0, os.path.abspath('..'))
-
-import argparse
 
 from DataLoader.dataloader_DoseUformer import get_loader
 from NetworkTrainer.network_trainer import NetworkTrainer
@@ -16,44 +16,38 @@ from model import SwinTU3D
 from online_evaluation import online_evaluation
 from loss import Loss
 
-if __name__ == '__main__':
 
-    # added by ChenChen Hu
-    print('This script has been modified by Chenchen Hu !')
+def load_config(path, config_name):
+    with open(os.path.join(path, config_name)) as file:
+        config = yaml.safe_load(file)
+        # cfg = AttrDict(config)
+        # print(cfg.project_name)
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--batch_size', type=int, default=2,
-                        help='batch size for training (default: 2)')
-    parser.add_argument('--list_GPU_ids', nargs='+', type=int, default=[1, 0],
-                        help='list_GPU_ids for training (default: [1, 0])')
-    parser.add_argument('--max_iter', type=int, default=80000,
-                        help='training iterations(default: 80000)')
-    # added by Chenchen Hu
-    parser.add_argument('--latest', type=int, default=0,
-                        help='load the latest model')
-    parser.add_argument('--seed', type=int, default=0,
-                        help='set a fixed seed')
-    parser.add_argument('--model_path', type=str, default='../../Output/DoseUformer/latest.pkl')
+    return config
 
-    args = parser.parse_args()
+
+def main(configs):
+    print('This script modified from Shuolin Liu !')
 
     # set a fixed seed
-    # set_determinism(args.seed)
+    set_determinism(configs['training']['seed'])
+
     #  Start training
-    trainer = NetworkTrainer()
-    trainer.setting.project_name = 'DoseUformer'
-    trainer.setting.output_dir = '../../Output/DoseUformer'
-    list_GPU_ids = args.list_GPU_ids
+    trainer = NetworkTrainer(name=configs['project_name'])
+    trainer.setting.project_name = configs['project_name']
+    trainer.setting.output_dir = configs['output_dir']
 
     # setting.network is an object
-    trainer.setting.network = SwinTU3D(patch_size=(4, 4, 4), depths=(2, 2, 6, 2), norm_layer=torch.nn.LayerNorm)
+    trainer.setting.network = SwinTU3D(patch_size=configs['model']['patch_size'],
+                                       depths=configs['model']['depths'],
+                                       norm_layer=torch.nn.LayerNorm)
 
-    trainer.setting.max_iter = args.max_iter  # 80000 or 100000
+    trainer.setting.max_iter = configs['training']['iterations']
 
-    trainer.setting.train_loader = get_loader(  # -> data.DataLoader
-        batch_size=args.batch_size,  # 2
-        num_samples_per_epoch=args.batch_size * 500,  # 500 iterations per epoch => 1000 samples per epoch
-        phase='train',
+    trainer.setting.train_loader = get_loader(
+        batch_size=configs['training']['loader']['batch_size'],
+        num_samples_per_epoch=configs['training']['loader']['batch_size'] * 500,  # an epoch
+        phase=configs['training']['loader']['phase'],
         num_works=4
     )
 
@@ -71,11 +65,12 @@ if __name__ == '__main__':
     trainer.setting.optimizer = torch.optim.AdamW([
         {'params': [param[1] for param in relative_params], 'weight_decay': 0.},
         {'params': [param[1] for param in base_params], }],
-        lr=3e-4, weight_decay=1e-4, betas=(0.9, 0.999), eps=1e-08, amsgrad=True)
+        lr=configs['training']['optimizer']['lr'], weight_decay=configs['training']['optimizer']['weight_decay'],
+        betas=(0.9, 0.999), eps=1e-08, amsgrad=True)
 
-    trainer.setting.lr_scheduler_type = 'cosine'
+    trainer.setting.lr_scheduler_type = configs['training']['lr_scheduler']['type']  # cosine
     trainer.setting.lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(trainer.setting.optimizer,
-                                                                              T_max=args.max_iter,
+                                                                              T_max=configs['training']['iterations'],
                                                                               eta_min=1e-7,
                                                                               last_epoch=-1)
 
@@ -96,15 +91,18 @@ if __name__ == '__main__':
 
     if not os.path.exists(trainer.setting.output_dir):
         os.mkdir(trainer.setting.output_dir)
-    trainer.set_GPU_device(list_GPU_ids)
+    trainer.set_GPU_device(configs['list_GPU_ids'])
 
     # added by Chenchen Hu
-    # load the latest model when the recovery is True and the model exists.
-    if args.latest and os.path.exists(args.model_path):
-        trainer.init_trainer(ckpt_file=args.model_path,
-                             list_GPU_ids=list_GPU_ids,
+    if configs['pre_trained'] and os.path.exists(configs['pre_trained']['model_path']):
+        trainer.init_trainer(ckpt_file=configs['pre_trained']['model_path'],
+                             list_GPU_ids=configs['list_GPU_ids'],
                              only_network=False)
 
     trainer.run()
 
-    trainer.print_log_to_file('# Done !\n', 'a')
+
+if __name__ == '__main__':
+    CONFIG_PATH = '../Configs'
+    cfgs = load_config(CONFIG_PATH, config_name='default_config.yaml')
+    main(cfgs)

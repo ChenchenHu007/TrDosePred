@@ -1,11 +1,11 @@
 # -*- encoding: utf-8 -*-
-import argparse
 import os
 import sys
 
 import SimpleITK as sitk
 import numpy as np
 import torch
+import yaml
 from tqdm import tqdm
 
 if os.path.abspath('..') not in sys.path:
@@ -14,6 +14,15 @@ if os.path.abspath('..') not in sys.path:
 from Evaluate.evaluate_openKBP import get_Dose_score_and_DVH_score
 from model import SwinTU3D
 from NetworkTrainer.network_trainer import NetworkTrainer
+
+
+def load_config(path, config_name):
+    with open(os.path.join(path, config_name)) as file:
+        config = yaml.safe_load(file)
+        # cfg = AttrDict(config)
+        # print(cfg.project_name)
+
+    return config
 
 
 def read_data(patient_dir):
@@ -153,38 +162,40 @@ def inference(trainer, list_patient_dirs, save_path, do_TTA=True):
             sitk.WriteImage(prediction_nii, save_path + '/' + patient_id + '/dose.nii.gz')
 
 
-if __name__ == "__main__":
+def main(configs):
     if not os.path.exists('../../Data/OpenKBP_C3D'):
         raise Exception('OpenKBP_C3D should be prepared before testing, please run prepare_OpenKBP_C3D.py')
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--GPU_id', type=int, default=0,
-                        help='GPU id used for testing (default: 0)')
-    parser.add_argument('--model_path', type=str, default='../../Output/DoseUformer/best_val_evaluation_index.pkl')
-    parser.add_argument('--TTA', type=bool, default=True,
-                        help='do test-time augmentation, default True')
-    args = parser.parse_args()
-
     trainer = NetworkTrainer()
-    trainer.setting.project_name = 'DoseUformer'
-    trainer.setting.output_dir = '../../Output/DoseUformer'
+    trainer.setting.project_name = configs['project_name']
+    trainer.setting.output_dir = configs['output_dir']
 
-    trainer.setting.network = SwinTU3D(patch_size=(4, 4, 4), depths=(2, 2, 6, 2), norm_layer=torch.nn.LayerNorm)
+    trainer.setting.network = SwinTU3D(patch_size=configs['model']['patch_size'],
+                                       depths=configs['model']['depths'],
+                                       norm_layer=torch.nn.LayerNorm)
 
     # Load model weights
-    trainer.init_trainer(ckpt_file=args.model_path,
-                         list_GPU_ids=[args.GPU_id],
+    trainer.init_trainer(ckpt_file=os.path.join(trainer.setting.output_dir, 'best_val_evaluation_index.pkl'),
+                         list_GPU_ids=configs['list_GPU_ids'],
                          only_network=True)
 
     # Start inference
     print('\n\n# Start inference !')
     list_patient_dirs = ['../../Data/OpenKBP_C3D/pt_' + str(i) for i in range(241, 341)]
-    inference(trainer, list_patient_dirs, save_path=trainer.setting.output_dir + '/Prediction', do_TTA=args.TTA)
+    inference(trainer, list_patient_dirs, save_path=os.path.join(trainer.setting.output_dir, 'Prediction'),
+              do_TTA=configs['testing']['TTA'])
 
     # Evaluation
     print('\n\n# Start evaluation !')
-    Dose_score, DVH_score = get_Dose_score_and_DVH_score(prediction_dir=trainer.setting.output_dir + '/Prediction',
-                                                         gt_dir='../../Data/OpenKBP_C3D')
+    Dose_score, DVH_score = get_Dose_score_and_DVH_score(
+        prediction_dir=os.path.join(trainer.setting.output_dir, 'Prediction'),
+        gt_dir='../../Data/OpenKBP_C3D')
 
-    print('\n\nDose score is: ' + str(Dose_score))
-    print('DVH score is: ' + str(DVH_score))
+    print('\n\nDose score is: {}'.format(Dose_score))
+    print('DVH score is: {}'.format(DVH_score))
+
+
+if __name__ == "__main__":
+    CONFIG_PATH = '../Configs'
+    cfgs = load_config(CONFIG_PATH, config_name='default_config.yaml')
+    main(cfgs)

@@ -297,10 +297,14 @@ class SwinTU3D(nn.Module):
             layer_name = f'norm{i_layer}'
             self.add_module(layer_name, layer)
 
+        # These are codes for DoseUformer 2.6410
         # self.upsample_2 = UpConv(in_ch=self.num_features[0], out_ch=int(self.num_features[0] / 2), scale_factor=2)
         # self.upsample_1 = UpConv(in_ch=int(self.num_features[0] / 2), out_ch=int(self.num_features[0] / 4),
         #                          scale_factor=2)
-        # self.conv_out = SingleConv(in_chans=int(self.num_features[0] / 4), out_chans=1, kernel_size=3)
+        # self.conv_out = nn.Sequential(
+        #     SingleConv(in_chans=int(self.num_features[0] / 4), out_chans=1, kernel_size=3),
+        #     nn.Conv3d(in_channels=1, out_channels=1, kernel_size=1)
+        # )
 
         self.head = nn.Sequential(OrderedDict([
             ('upsampling_2', UpConv(in_ch=self.num_features[0], out_ch=int(self.num_features[0] / 2), scale_factor=2)),
@@ -395,6 +399,7 @@ class SwinTU3D(nn.Module):
             y = self.fusions[-i](y)
             y_out, y = decoder(y)
 
+        # These are codes for DoseUformer 2.6410
         # y_out = self.upsample_2(y_out)  # embed_dim -> embed_dim / 2  48
         # y_out = self.upsample_1(y_out)  # 24
         # y_out = self.conv_out(y_out)

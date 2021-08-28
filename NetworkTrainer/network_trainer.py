@@ -1,11 +1,11 @@
 # -*- encoding: utf-8 -*-
+import os
 import time
 
-# import psutil
-# import cpuinfo
 import torch
 import torch.nn as nn
 from torch import optim
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 
@@ -22,7 +22,7 @@ class TrainerSetting:
         # Default not use this,
         # because the models of "best_train_loss", "best_val_evaluation_index", "latest" have been saved.
         self.save_per_epoch = 99999999
-        self.eps_train_loss = 0.01  # unused
+        self.eps_train_loss = 0.01
 
         self.network = None
         self.device = None
@@ -83,10 +83,11 @@ class TrainerTime:
 
 
 class NetworkTrainer:
-    def __init__(self):
+    def __init__(self, name='DoseUformer'):
         self.log = TrainerLog()
         self.setting = TrainerSetting()
         self.time = TrainerTime()
+        self.writer = SummaryWriter(os.path.join('./runs', name))  # ./runs/name
 
     def set_GPU_device(self, list_GPU_ids):
         self.setting.list_GPU_ids = list_GPU_ids
@@ -160,12 +161,12 @@ class NetworkTrainer:
             self.setting.lr_scheduler.step()
 
     def update_moving_train_loss(self, loss):
-        if self.log.moving_train_loss is None:  # default
+        if self.log.moving_train_loss is None:  # first epoch
             self.log.moving_train_loss = loss.item()
         else:
             self.log.moving_train_loss = \
                 (1 - self.setting.eps_train_loss) * self.log.moving_train_loss \
-                + self.setting.eps_train_loss * loss.item()  # last epoch
+                + self.setting.eps_train_loss * loss.item()  # others
 
     def update_average_statistics(self, loss, phase='train'):
         if phase == 'train':
@@ -221,7 +222,7 @@ class NetworkTrainer:
 
         time_start_load_data = time.time()
 
-        for batch_idx, case in tqdm(enumerate(self.setting.train_loader)):
+        for batch_idx, case in tqdm(enumerate(self.setting.train_loader)):  # an epoch
 
             if (self.setting.max_iter is not None) and (self.log.iter >= self.setting.max_iter - 1):
                 break
@@ -243,11 +244,13 @@ class NetworkTrainer:
             # Used for counting average loss of this epoch
             sum_train_loss += loss.item()  # the item() method extracts the loss value as a python float
             count_iter += 1
+            # log train loss for an iteration
+            self.writer.add_scalar('Loss/iter', loss.item(), self.log.iter)
 
             self.update_moving_train_loss(loss)
             self.update_lr()
 
-            # Print loss during the epoch 0
+            # Print delta loss during the epoch 0
             if self.log.epoch == 0:
                 if self.log.iter % 10 == 0:
                     self.print_log_to_file('Iter %12d       %12.5f\n' %
@@ -256,8 +259,10 @@ class NetworkTrainer:
             time_start_load_data = time.time()
 
         if count_iter > 0:
-            average_loss = sum_train_loss / count_iter
+            average_loss = sum_train_loss / count_iter  # average loss for an epoch
             self.update_average_statistics(average_loss, phase='train')
+            # log average loss for an epoch
+            self.writer.add_scalar('Loss/train', average_loss, self.log.iter)
 
         self.time.train_time_per_epoch = time.time() - time_start_train
 
@@ -269,8 +274,10 @@ class NetworkTrainer:
             self.print_log_to_file('===============================> No online evaluation method specified ! \n', 'a')
             raise Exception('No online evaluation method specified !')
         else:
-            val_index = self.setting.online_evaluation_function_val(self)
-            self.update_average_statistics(val_index, phase='val')
+            average_val_index = self.setting.online_evaluation_function_val(self)
+            self.update_average_statistics(average_val_index, phase='val')
+            # log average index after an epoch
+            self.writer.add_scalar('Loss/val', average_val_index, self.log.iter)
 
         self.time.val_time_per_epoch = time.time() - time_start_val
 
@@ -279,12 +286,11 @@ class NetworkTrainer:
             self.print_log_to_file('Start training !\n', 'w')
         else:
             self.print_log_to_file('Continue training !\n', 'w')
-        # self.print_log_to_file('CPU: {}, ram: {}GB\n'.format(cpuinfo.get_cpu_info()['brand_raw'],
-        #                                                      round(psutil.virtual_memory().total / (1024.0 ** 3))), 'a')
-        self.print_log_to_file('GPU: {}\n'.format(torch.cuda.get_device_name(self.setting.device)), 'a')
+
         self.print_log_to_file(time.strftime('Local time: %H:%M:%S\n', time.localtime(time.time())), 'a')
 
         # Start training
+        start_time = time.time()
         while (self.log.epoch < self.setting.max_epoch - 1) and (self.log.iter < self.setting.max_iter - 1):  # an epoch
 
             time_start_this_epoch = time.time()
@@ -331,7 +337,10 @@ class NetworkTrainer:
                 self.setting.optimizer.param_groups[0]['lr'], self.setting.optimizer.param_groups[-1]['lr']), 'a')
             self.print_log_to_file(time.strftime('    time: %H:%M:%S\n', time.localtime(time.time())), 'a')
 
+        self.writer.flush()
+        self.writer.close()
         self.print_log_to_file('===============================> End successfully\n', 'a')
+        self.print_log_to_file('    Total training time %12.5f\n' % (time.time() - start_time), 'a')
 
     def print_log_to_file(self, txt, mode):
         with open(self.setting.output_dir + '/log.txt', mode) as log_:

@@ -36,13 +36,14 @@ def online_evaluation(trainer):
             list_Dose_score.append(Dose_score)
 
             try:
-                trainer.print_log_to_file('========> ' + patient_name + ':  ' + str(Dose_score), 'a')
+                trainer.print_log_to_file('========> {}:  {}\n'.format(patient_name, Dose_score), 'a')
             except:
                 pass
 
     try:
-        trainer.print_log_to_file('===============================================> mean Dose score: '
-                                  + str(np.mean(list_Dose_score)), 'a')
+        trainer.print_log_to_file(
+            '===============================================> mean Dose score: {}\n'.format(np.mean(list_Dose_score)),
+            'a')
     except:
         pass
     # Evaluation score is the lower the better

@@ -1,0 +1,31 @@
+# initial settings
+# 7m25s per epoch
+project_name: 'DoseUformer_config_1'
+output_dir: '../../Output/DoseUformer_config_1'
+list_GPU_ids: [ 0 ]
+
+pre_trained:
+  status: false
+  model_path: '../../Output/DoseUformer/latest.pkl'
+
+model:
+  patch_size: [ 4, 4, 4 ]
+  depths: [ 2, 2, 6, 2 ]
+
+training:
+  seed: 0
+  iterations: 100000  # max_iter
+
+  loader:
+    phase: 'train'
+    batch_size: 3
+
+  optimizer:
+    lr: 3.0E-4
+    weight_decay: 1.0E-4
+
+  lr_scheduler:
+    type: 'cosine'
+
+testing:
+  TTA: true
