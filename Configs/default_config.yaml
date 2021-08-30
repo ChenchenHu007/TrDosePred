@@ -1,7 +1,7 @@
 # initial settings
 # 5m12s per epoch
-project_name: 'DoseUformer_default_config'
-output_dir: '../../Output/DoseUformer_default_config'
+project_name: 'DoseUformer'
+output_dir: '../../Output/DoseUformer'
 list_GPU_ids: [ 0 ]
 
 pre_trained:

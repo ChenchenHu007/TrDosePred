@@ -94,7 +94,7 @@ def main(configs):
     trainer.set_GPU_device(configs['list_GPU_ids'])
 
     # added by Chenchen Hu
-    if configs['pre_trained'] and os.path.exists(configs['pre_trained']['model_path']):
+    if configs['pre_trained']['status'] and os.path.exists(configs['pre_trained']['model_path']):
         trainer.init_trainer(ckpt_file=configs['pre_trained']['model_path'],
                              list_GPU_ids=configs['list_GPU_ids'],
                              only_network=False)

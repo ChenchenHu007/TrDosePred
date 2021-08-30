@@ -154,12 +154,12 @@ def inference(trainer, list_patient_dirs, save_path, do_TTA=True):
             prediction = 70. * prediction
 
             # Save prediction to nii image
-            templete_nii = sitk.ReadImage(patient_dir + '/possible_dose_mask.nii.gz')
+            templete_nii = sitk.ReadImage(os.path.join(patient_dir, 'possible_dose_mask.nii.gz'))
             prediction_nii = sitk.GetImageFromArray(prediction)
             prediction_nii = copy_sitk_imageinfo(templete_nii, prediction_nii)
             if not os.path.exists(save_path + '/' + patient_id):
                 os.mkdir(save_path + '/' + patient_id)
-            sitk.WriteImage(prediction_nii, save_path + '/' + patient_id + '/dose.nii.gz')
+            sitk.WriteImage(prediction_nii, os.path.join(save_path, patient_id, 'dose.nii.gz'))
 
 
 def main(configs):
