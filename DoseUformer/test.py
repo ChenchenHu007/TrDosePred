@@ -1,4 +1,5 @@
 # -*- encoding: utf-8 -*-
+import argparse
 import os
 import sys
 
@@ -197,5 +198,10 @@ def main(configs):
 
 if __name__ == "__main__":
     CONFIG_PATH = '../Configs'
-    cfgs = load_config(CONFIG_PATH, config_name='default_config.yaml')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', type=str, default='default_config.yaml',
+                        help='config name')
+    args = parser.parse_args()
+
+    cfgs = load_config(CONFIG_PATH, config_name=args.config)
     main(cfgs)
