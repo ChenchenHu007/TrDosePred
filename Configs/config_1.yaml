@@ -1,5 +1,5 @@
 # initial settings
-# 7m25s per epoch
+# 5m12s per epoch
 project_name: 'DoseUformer_config_1'
 output_dir: '../../Output/DoseUformer_config_1'
 list_GPU_ids: [ 0 ]
@@ -14,11 +14,11 @@ model:
 
 training:
   seed: 0
-  iterations: 100000  # max_iter
+  iterations: 90000  # max_iter
 
   loader:
     phase: 'train'
-    batch_size: 3
+    batch_size: 2
 
   optimizer:
     lr: 3.0E-4
@@ -29,3 +29,8 @@ training:
 
 testing:
   TTA: true
+
+# This setting is same to default config.
+# To find a max number of training iteration by using tensorboard, a complete training process is needed.
+# Dose score: 2.6378
+# DVH score: 1.8182
