@@ -245,7 +245,7 @@ class NetworkTrainer:
             sum_train_loss += loss.item()  # the item() method extracts the loss value as a python float
             count_iter += 1
             # log train loss for an iteration
-            self.writer.add_scalar('Loss/iter', loss.item(), self.log.iter)
+            # self.writer.add_scalar('Loss/iter', loss.item(), self.log.iter)
 
             self.update_moving_train_loss(loss)
             self.update_lr()
@@ -262,7 +262,7 @@ class NetworkTrainer:
             average_loss = sum_train_loss / count_iter  # average loss for an epoch
             self.update_average_statistics(average_loss, phase='train')
             # log average loss for an epoch
-            self.writer.add_scalar('Loss/train', average_loss, self.log.iter)
+            self.writer.add_scalar('Loss/train', average_loss, self.log.epoch)
 
         self.time.train_time_per_epoch = time.time() - time_start_train
 
