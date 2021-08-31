@@ -211,18 +211,12 @@ class SwinTU3D(nn.Module):
         self.num_layers = len(depths)
         self.embed_dim = embed_dim
         self.patch_norm = patch_norm
-        self.out_indices = out_indices
+        self.out_indices = out_indices if len(out_indices) == len(depths) else tuple([i for i in range(len(depths))])
         self.frozen_stages = frozen_stages
         self.window_size = window_size
         self.patch_size = patch_size
         self.conv_stem = conv_stem
 
-        # split image into non-overlapping patches
-        # self.patch_embed = PatchEmbed3D(
-        #     patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim,
-        #     norm_layer=norm_layer if self.patch_norm else None)
-        # self.patch_embed = PatchConv3D(patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim,
-        #                                norm_layer=norm_layer if self.patch_norm else None)
         if conv_stem:
             self.patch_embed = PatchConv3D(patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim,
                                            norm_layer=norm_layer if self.patch_norm else None)
@@ -256,7 +250,7 @@ class SwinTU3D(nn.Module):
 
         # build decoders
         self.decoders = nn.ModuleList()
-        for i_decoder in range(self.num_layers - 2, -1, -1):  # (2, 1, 0)
+        for i_decoder in range(self.num_layers - 1):  # (0, 1, 2)
             decoder = BasicLayer(
                 dim=int(embed_dim * 2 ** i_decoder),
                 depth=depths[i_decoder],
@@ -272,15 +266,13 @@ class SwinTU3D(nn.Module):
                 downsample=None,
                 use_checkpoint=use_checkpoint)
             self.decoders.append(decoder)
-        self.decoders = self.decoders[::-1]
 
         # build Upsample layers
         self.up_layers = nn.ModuleList()
-        for i in range(self.num_layers - 2, -1, -1):
+        for i in range(self.num_layers - 1):
             up_layer = UpConv(in_ch=int(embed_dim * 2 ** (i + 1)), out_ch=int(embed_dim * 2 ** i),
                               scale_factor=2)
             self.up_layers.append(up_layer)
-        self.up_layers = self.up_layers[::-1]
 
         num_features = [int(embed_dim * 2 ** i) for i in range(self.num_layers)]
         self.num_features = num_features
@@ -292,7 +284,7 @@ class SwinTU3D(nn.Module):
             self.fusions.append(fusion)
 
         # add a norm layer for each output
-        for i_layer in out_indices:
+        for i_layer in self.out_indices:
             layer = norm_layer(num_features[i_layer])
             layer_name = f'norm{i_layer}'
             self.add_module(layer_name, layer)
@@ -385,6 +377,7 @@ class SwinTU3D(nn.Module):
                 x_out = norm_layer(x_out)
 
                 out = rearrange(x_out, 'n d h w c -> n c d h w')
+                # print('encoder{}: {}'.format(i, out.shape))
                 outs.append(out)
 
         y = outs[-1]
@@ -398,6 +391,7 @@ class SwinTU3D(nn.Module):
             y = torch.cat([y, shortcut], dim=1)
             y = self.fusions[-i](y)
             y_out, y = decoder(y)
+            # print('decoder{}: {}'.format(i, y.shape))
 
         # These are codes for DoseUformer 2.6410
         # y_out = self.upsample_2(y_out)  # embed_dim -> embed_dim / 2  48
