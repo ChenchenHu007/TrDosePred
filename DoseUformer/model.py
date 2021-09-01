@@ -369,7 +369,7 @@ class SwinTU3D(nn.Module):
         outs = []
         for i in range(self.num_layers):
             layer = self.layers[i]
-            x_out, x = layer(x)  # x is the output of PatchMerging
+            x_out, x = layer(x)  # x is the output after down-sampling, x_out is output without down-sampling
 
             if i in self.out_indices:
                 x_out = rearrange(x_out, 'n c d h w -> n d h w c')
@@ -385,11 +385,11 @@ class SwinTU3D(nn.Module):
         for i in range(1, self.num_layers):  # [1, 2, 3]
             decoder = self.decoders[-i]
             up_layer = self.up_layers[-i]
-            y = up_layer(y)
+            y = up_layer(y)  # up-sampling
             # add skip connection here
             shortcut = outs[-i]
-            y = torch.cat([y, shortcut], dim=1)
-            y = self.fusions[-i](y)
+            y = torch.cat([y, shortcut], dim=1)  # skip connection
+            y = self.fusions[-i](y)  # fusion
             y_out, y = decoder(y)
             # print('decoder{}: {}'.format(i, y.shape))
 
