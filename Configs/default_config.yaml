@@ -1,16 +1,34 @@
 # initial settings
 # 5m12s per epoch
-project_name: 'DoseUformer'
-output_dir: '../../Output/DoseUformer'
+project_name: 'default_config_NewDecoder'
+output_dir: '../../Output/default_config_NewDecoder'  # new code for decoder but implementation is unchanged !
 list_GPU_ids: [ 0 ]
 
 pre_trained:
   status: false
-  model_path: '../../Output/DoseUformer/latest.pkl'
+  model_path: ''
 
 model:
+  pretrained: null
   patch_size: [ 4, 4, 4 ]
+  conv_stem: true
+  patch_merging_mode: 'max-pooling'  # ('default', 'max-pooling', 'avg-pooling', 'interpolation')
+  initialized: null  # (None, 'default', 'kaiming_uniform', 'kaiming_normal')
+  in_chans: 3
+  embed_dim: 96
   depths: [ 2, 2, 6, 2 ]
+  num_heads: [ 3, 6, 12, 24 ]
+  window_size: [ 8, 7, 7 ]
+  mlp_ratio: 4.
+  qkv_bias: true
+  qk_scale: null
+  drop_rate: 0.
+  attn_drop_rate: 0.
+  drop_path_rate: 0.2
+  patch_norm: false
+  out_indices: [ 0, 1, 2, 3 ]
+  frozen_stages: -1
+  use_checkpoint: false
 
 training:
   seed: 0
