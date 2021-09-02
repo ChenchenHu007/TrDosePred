@@ -39,8 +39,7 @@ def main(configs):
     trainer.setting.output_dir = configs['output_dir']
 
     # setting.network is an object
-    trainer.setting.network = SwinTU3D(patch_size=configs['model']['patch_size'],
-                                       depths=configs['model']['depths'],
+    trainer.setting.network = SwinTU3D(*configs['model'].values(),
                                        norm_layer=torch.nn.LayerNorm)
 
     trainer.setting.max_iter = configs['training']['iterations']

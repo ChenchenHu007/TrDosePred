@@ -359,6 +359,7 @@ class BasicLayer(nn.Module):
                  drop_path=0.,
                  norm_layer=nn.LayerNorm,
                  downsample=None,
+                 downsample_mode=None,
                  use_checkpoint=False):
         super().__init__()
         self.window_size = window_size
@@ -386,7 +387,7 @@ class BasicLayer(nn.Module):
 
         self.downsample = downsample
         if self.downsample is not None:
-            self.downsample = downsample(dim=dim, norm_layer=norm_layer)
+            self.downsample = downsample(dim=dim, mode=downsample_mode, norm_layer=norm_layer)
 
     def forward(self, x):
         """ Forward function.
@@ -458,161 +459,3 @@ class PatchEmbed3D(nn.Module):
             x = x.transpose(1, 2).view(-1, self.embed_dim, D, Wh, Ww)
 
         return x
-
-
-class SwinTransformer3D(nn.Module):
-    """ Swin Transformer backbone.
-        A PyTorch impl of : `Swin Transformer: Hierarchical Vision Transformer using Shifted Windows`  -
-          https://arxiv.org/pdf/2103.14030
-
-    Args:
-        patch_size (int | tuple(int)): Patch size. Default: (4,4,4).
-        in_chans (int): Number of input image channels. Default: 3.
-        embed_dim (int): Number of linear projection output channels. Default: 96.
-        depths (tuple[int]): Depths of each Swin Transformer stage.
-        num_heads (tuple[int]): Number of attention head of each stage.
-        window_size (int): Window size. Default: 7.
-        mlp_ratio (float): Ratio of mlp hidden dim to embedding dim. Default: 4.
-        qkv_bias (bool): If True, add a learnable bias to query, key, value. Default: Truee
-        qk_scale (float): Override default qk scale of head_dim ** -0.5 if set.
-        drop_rate (float): Dropout rate.
-        attn_drop_rate (float): Attention dropout rate. Default: 0.
-        drop_path_rate (float): Stochastic depth rate. Default: 0.2.
-        norm_layer: Normalization layer. Default: nn.LayerNorm.
-        patch_norm (bool): If True, add normalization after patch embedding. Default: False.
-        frozen_stages (int): Stages to be frozen (stop grad and set eval mode).
-            -1 means not freezing any parameters.
-    """
-
-    def __init__(self,
-                 pretrained=None,
-                 patch_size=(2, 4, 4),
-                 in_chans=3,
-                 embed_dim=96,
-                 depths=(2, 2, 6, 2),
-                 num_heads=(3, 6, 12, 24),
-                 window_size=(8, 7, 7),
-                 mlp_ratio=4.,
-                 qkv_bias=True,
-                 qk_scale=None,
-                 drop_rate=0.,
-                 attn_drop_rate=0.,
-                 drop_path_rate=0.2,
-                 norm_layer=nn.LayerNorm,
-                 patch_norm=False,
-                 out_indices=(0, 1, 2, 3),
-                 frozen_stages=-1,
-                 use_checkpoint=False):
-        super().__init__()
-
-        self.pretrained = pretrained
-        self.num_layers = len(depths)
-        self.embed_dim = embed_dim
-        self.patch_norm = patch_norm
-        self.out_indices = out_indices
-        self.frozen_stages = frozen_stages
-        self.window_size = window_size
-        self.patch_size = patch_size
-
-        # split image into non-overlapping patches
-        self.patch_embed = PatchEmbed3D(
-            patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim,
-            norm_layer=norm_layer if self.patch_norm else None)
-
-        self.pos_drop = nn.Dropout(p=drop_rate)
-
-        # stochastic depth
-        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))]  # stochastic depth decay rule
-
-        # build layers
-        self.layers = nn.ModuleList()
-        for i_layer in range(self.num_layers):
-            layer = BasicLayer(
-                dim=int(embed_dim * 2 ** i_layer),
-                depth=depths[i_layer],
-                num_heads=num_heads[i_layer],
-                window_size=window_size,
-                mlp_ratio=mlp_ratio,
-                qkv_bias=qkv_bias,
-                qk_scale=qk_scale,
-                drop=drop_rate,
-                attn_drop=attn_drop_rate,
-                drop_path=dpr[sum(depths[:i_layer]):sum(depths[:i_layer + 1])],
-                norm_layer=norm_layer,
-                downsample=PatchMerging if i_layer < self.num_layers - 1 else None,
-                use_checkpoint=use_checkpoint)
-            self.layers.append(layer)
-
-        num_features = [int(embed_dim * 2 ** i) for i in range(self.num_layers)]
-        self.num_features = num_features
-
-        # add a norm layer for each output
-        for i_layer in out_indices:
-            layer = norm_layer(num_features[i_layer])
-            layer_name = f'norm{i_layer}'
-            self.add_module(layer_name, layer)
-
-        self._freeze_stages()
-
-    def _freeze_stages(self):
-        if self.frozen_stages >= 0:
-            self.patch_embed.eval()
-            for param in self.patch_embed.parameters():
-                param.requires_grad = False
-
-        if self.frozen_stages >= 1:
-            self.pos_drop.eval()
-            for i in range(0, self.frozen_stages):
-                m = self.layers[i]
-                m.eval()
-                for param in m.parameters():
-                    param.requires_grad = False
-
-    def init_weights(self, pretrained=None):
-        """Initialize the weights in backbone.
-
-        Args:
-            pretrained (str, optional): Path to pre-trained weights.
-                Defaults to None.
-        """
-
-        def _init_weights(m):
-            if isinstance(m, nn.Linear):
-                trunc_normal_(m.weight, std=.02)
-                if isinstance(m, nn.Linear) and m.bias is not None:
-                    nn.init.constant_(m.bias, 0)
-            elif isinstance(m, nn.LayerNorm):
-                nn.init.constant_(m.bias, 0)
-                nn.init.constant_(m.weight, 1.0)
-
-        if pretrained:
-            self.pretrained = pretrained
-        if isinstance(pretrained, str):
-            self.apply(_init_weights)
-            # logger = get_root_logger()
-            # load_checkpoint(self, pretrained, strict=False, logger=logger)
-        elif pretrained is None:
-            self.apply(_init_weights)
-        else:
-            raise TypeError('pretrained must be a str or None')
-
-    def forward(self, x):
-        """Forward function."""
-        x = self.patch_embed(x)  # B C D Wh Ww
-
-        x = self.pos_drop(x)
-
-        outs = []
-        for i in range(self.num_layers):
-            layer = self.layers[i]
-            x_out, x = layer(x)  # x is the output of PatchMerging
-
-            if i in self.out_indices:
-                x_out = rearrange(x_out, 'n c d h w -> n d h w c')
-                norm_layer = getattr(self, f'norm{i}')
-                x_out = norm_layer(x_out)
-
-                out = rearrange(x_out, 'n d h w c -> n c d h w')
-                outs.append(out)
-
-        return tuple(outs)

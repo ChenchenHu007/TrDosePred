@@ -60,21 +60,34 @@ class PatchMerging(nn.Module):
         norm_layer (nn.Module, optional): Normalization layer.  Default: nn.LayerNorm
     """
 
-    def __init__(self, dim, norm_layer=nn.LayerNorm):
+    def __init__(self, dim, mode='default', norm_layer=nn.LayerNorm):
         super().__init__()
         self.dim = dim
-        # self.reduction = nn.Linear(8 * dim, 2 * dim, bias=False)
+        assert mode in [None, 'default', 'max-pooling', 'avg-pooling', 'interpolation', 'conv']
+        self.mode = mode
+        self.norm = nn.Identity()
+        self.reduction = nn.Identity()
 
-        # downsampling using conv
-        # self.reduction = SingleConv(in_chans=dim, out_chans=2 * dim, kernel_size=3, stride=2, padding=1)
-
-        # downsampling using pooling
-        self.reduction = nn.Sequential(
-            nn.MaxPool3d(kernel_size=2, stride=2),
-            SingleConv(in_chans=dim, out_chans=2 * dim, kernel_size=3, stride=1, padding=1)
-        )
-
-        # self.norm = norm_layer(8 * dim)
+        if self.mode == 'default':
+            self.norm = norm_layer(8 * dim)
+            self.reduction = nn.Linear(8 * dim, 2 * dim, bias=False)
+        elif self.mode == 'max-pooling':
+            self.reduction = nn.Sequential(nn.MaxPool3d(kernel_size=2, stride=2),
+                                           SingleConv(in_chans=dim, out_chans=2 * dim, kernel_size=3, stride=1,
+                                                      padding=1)
+                                           )
+        elif self.mode == 'avg-pooling':
+            self.reduction = nn.Sequential(nn.AvgPool3d(kernel_size=2, stride=2),
+                                           SingleConv(in_chans=dim, out_chans=2 * dim, kernel_size=3, stride=1,
+                                                      padding=1)
+                                           )
+        elif self.mode == 'interpolation':
+            self.reduction = nn.Sequential(nn.Upsample(scale_factor=0.5, mode='trilinear', align_corners=True),
+                                           SingleConv(in_chans=dim, out_chans=2 * dim, kernel_size=3, stride=1,
+                                                      padding=1)
+                                           )
+        elif self.mode == 'conv':
+            self.reduction = SingleConv(in_chans=dim, out_chans=2 * dim, kernel_size=3, stride=2, padding=1)
 
     def forward(self, x):
         """ Forward function.
@@ -89,24 +102,22 @@ class PatchMerging(nn.Module):
         if pad_input:
             x = F.pad(x, (0, 0, 0, W % 2, 0, H % 2))
 
-        # x0 = x[:, 0::2, 0::2, 0::2, :]  # B D/2 H/2 W/2 C
-        # x1 = x[:, 0::2, 1::2, 0::2, :]  # B D/2 H/2 W/2 C
-        # x2 = x[:, 0::2, 0::2, 1::2, :]  # B D/2 H/2 W/2 C
-        # x3 = x[:, 0::2, 1::2, 1::2, :]  # B D/2 H/2 W/2 C
-        # x4 = x[:, 1::2, 0::2, 0::2, :]  # B D/2 H/2 W/2 C
-        # x5 = x[:, 1::2, 1::2, 0::2, :]  # B D/2 H/2 W/2 C
-        # x6 = x[:, 1::2, 0::2, 1::2, :]  # B D/2 H/2 W/2 C
-        # x7 = x[:, 1::2, 1::2, 1::2, :]  # B D/2 H/2 W/2 C
-        # x = torch.cat([x0, x1, x2, x3, x4, x5, x6, x7], -1)  # B D/2 H/2 W/2 8*C
-
-        x = rearrange(x, 'b d h w c -> b c d h w')
-        # downsampling using interpolation
-        # x = F.interpolate(x, scale_factor=0.5, mode='trilinear', align_corners=True)
-        # x = SingleConv(in_chans=self.dim, out_chans=self.dim * 2, kernel_size=3, stride=1, padding=1)(x)
-
-        # x = self.norm(x)
-        x = self.reduction(x)
-        x = rearrange(x, 'b c d h w -> b d h w c')
+        if self.mode == 'default':
+            x0 = x[:, 0::2, 0::2, 0::2, :]  # B D/2 H/2 W/2 C
+            x1 = x[:, 0::2, 1::2, 0::2, :]  # B D/2 H/2 W/2 C
+            x2 = x[:, 0::2, 0::2, 1::2, :]  # B D/2 H/2 W/2 C
+            x3 = x[:, 0::2, 1::2, 1::2, :]  # B D/2 H/2 W/2 C
+            x4 = x[:, 1::2, 0::2, 0::2, :]  # B D/2 H/2 W/2 C
+            x5 = x[:, 1::2, 1::2, 0::2, :]  # B D/2 H/2 W/2 C
+            x6 = x[:, 1::2, 0::2, 1::2, :]  # B D/2 H/2 W/2 C
+            x7 = x[:, 1::2, 1::2, 1::2, :]  # B D/2 H/2 W/2 C
+            x = torch.cat([x0, x1, x2, x3, x4, x5, x6, x7], -1)  # B D/2 H/2 W/2 8*C
+            x = self.norm(x)
+            x = self.reduction(x)
+        else:
+            x = rearrange(x, 'b d h w c -> b c d h w')
+            x = self.reduction(x)
+            x = rearrange(x, 'b c d h w -> b d h w c')
 
         return x
 
@@ -174,7 +185,7 @@ class SwinTU3D(nn.Module):
         num_heads (tuple[int]): Number of attention head of each stage.
         window_size (int): Window size. Default: 7.
         mlp_ratio (float): Ratio of mlp hidden dim to embedding dim. Default: 4.
-        qkv_bias (bool): If True, add a learnable bias to query, key, value. Default: Truee
+        qkv_bias (bool): If True, add a learnable bias to query, key, value. Default: True
         qk_scale (float): Override default qk scale of head_dim ** -0.5 if set.
         drop_rate (float): Dropout rate.
         attn_drop_rate (float): Attention dropout rate. Default: 0.
@@ -189,6 +200,8 @@ class SwinTU3D(nn.Module):
                  pretrained=None,
                  patch_size=(2, 4, 4),
                  conv_stem=True,
+                 patch_merging_mode='max-pooling',  # ('default', 'max-pooling', 'avg-pooling', 'interpolation')
+                 initialized=None,  # (None, 'default', 'kaiming_uniform_', 'kaiming_normal_')
                  in_chans=3,
                  embed_dim=96,
                  depths=(2, 2, 6, 2),
@@ -200,11 +213,12 @@ class SwinTU3D(nn.Module):
                  drop_rate=0.,
                  attn_drop_rate=0.,
                  drop_path_rate=0.2,
-                 norm_layer=nn.LayerNorm,
+                 # norm_layer=nn.LayerNorm,
                  patch_norm=False,
                  out_indices=(0, 1, 2, 3),
                  frozen_stages=-1,
-                 use_checkpoint=False):
+                 use_checkpoint=False,
+                 norm_layer=nn.LayerNorm, ):
         super().__init__()
 
         self.pretrained = pretrained
@@ -216,6 +230,9 @@ class SwinTU3D(nn.Module):
         self.window_size = window_size
         self.patch_size = patch_size
         self.conv_stem = conv_stem
+        self.patch_merging_mode = patch_merging_mode
+        self.initialized = initialized
+        assert self.initialized in [None, 'default', 'kaiming_uniform', 'kaiming_normal']
 
         if conv_stem:
             self.patch_embed = PatchConv3D(patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim,
@@ -245,6 +262,7 @@ class SwinTU3D(nn.Module):
                 drop_path=dpr[sum(depths[:i_layer]):sum(depths[:i_layer + 1])],
                 norm_layer=norm_layer,
                 downsample=PatchMerging if i_layer < self.num_layers - 1 else None,
+                downsample_mode=self.patch_merging_mode,
                 use_checkpoint=use_checkpoint)
             self.layers.append(layer)
 
@@ -264,6 +282,7 @@ class SwinTU3D(nn.Module):
                 drop_path=dpr[sum(depths[:i_decoder]):sum(depths[:i_decoder + 1])],
                 norm_layer=norm_layer,
                 downsample=None,
+                downsample_mode=None,
                 use_checkpoint=use_checkpoint)
             self.decoders.append(decoder)
 
@@ -307,6 +326,8 @@ class SwinTU3D(nn.Module):
             ('conv1x1', nn.Conv3d(in_channels=1, out_channels=1, kernel_size=1))
         ]))
 
+        if self.initialized is not None:
+            self.init_weights(init_mode=self.initialized)
         # for fine tuning
         self._freeze_stages()
 
@@ -324,30 +345,64 @@ class SwinTU3D(nn.Module):
                 for param in m.parameters():
                     param.requires_grad = False
 
-    def init_weights(self, pretrained=None):
+    def init_weights(self, pretrained=None, init_mode='default'):
         """Initialize the weights in backbone.
 
         Args:
             pretrained (str, optional): Path to pre-trained weights.
                 Defaults to None.
+            init_mode
         """
 
         def _init_weights(m):
-            if isinstance(m, nn.Linear):
-                trunc_normal_(m.weight, std=.02)
-                if isinstance(m, nn.Linear) and m.bias is not None:
+            if init_mode == 'default':
+                if isinstance(m, nn.Linear):
+                    trunc_normal_(m.weight, std=.02)
+                    if isinstance(m, nn.Linear) and m.bias is not None:
+                        nn.init.constant_(m.bias, 0)
+                elif isinstance(m, nn.LayerNorm):
                     nn.init.constant_(m.bias, 0)
-            elif isinstance(m, nn.LayerNorm):
-                nn.init.constant_(m.bias, 0)
-                nn.init.constant_(m.weight, 1.0)
-            # added by Chenchen Hu
-            elif isinstance(m, nn.Conv3d):
-                nn.init.kaiming_uniform_(m.weight, mode='fan_in', nonlinearity='relu')
-                if m.bias is not None:
+                    nn.init.constant_(m.weight, 1.0)
+                # added by Chenchen Hu
+                elif isinstance(m, nn.Conv3d):
+                    nn.init.kaiming_uniform_(m.weight, mode='fan_in', nonlinearity='relu')
+                    if m.bias is not None:
+                        nn.init.constant_(m.bias, 0.)
+                elif isinstance(m, nn.InstanceNorm3d):
+                    nn.init.constant_(m.weight, 1.)
                     nn.init.constant_(m.bias, 0.)
-            elif isinstance(m, nn.InstanceNorm3d):
-                nn.init.constant_(m.weight, 1.)
-                nn.init.constant_(m.bias, 0.)
+            elif init_mode == 'kaiming_uniform':
+                if isinstance(m, nn.Linear):
+                    nn.init.kaiming_uniform_(m.weight, mode='fan_in', nonlinearity='relu')
+                    if isinstance(m, nn.Linear) and m.bias is not None:
+                        nn.init.constant_(m.bias, 0)
+                elif isinstance(m, nn.LayerNorm):
+                    nn.init.constant_(m.bias, 0)
+                    nn.init.constant_(m.weight, 1.0)
+                # added by Chenchen Hu
+                elif isinstance(m, nn.Conv3d):
+                    nn.init.kaiming_uniform_(m.weight, mode='fan_in', nonlinearity='relu')
+                    if m.bias is not None:
+                        nn.init.constant_(m.bias, 0.)
+                elif isinstance(m, nn.InstanceNorm3d):
+                    nn.init.constant_(m.weight, 1.)
+                    nn.init.constant_(m.bias, 0.)
+            elif init_mode == 'kaiming_normal':
+                if isinstance(m, nn.Linear):
+                    nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='relu')
+                    if isinstance(m, nn.Linear) and m.bias is not None:
+                        nn.init.constant_(m.bias, 0)
+                elif isinstance(m, nn.LayerNorm):
+                    nn.init.constant_(m.bias, 0)
+                    nn.init.constant_(m.weight, 1.0)
+                # added by Chenchen Hu
+                elif isinstance(m, nn.Conv3d):
+                    nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='relu')
+                    if m.bias is not None:
+                        nn.init.constant_(m.bias, 0.)
+                elif isinstance(m, nn.InstanceNorm3d):
+                    nn.init.constant_(m.weight, 1.)
+                    nn.init.constant_(m.bias, 0.)
 
         if pretrained:
             self.pretrained = pretrained
