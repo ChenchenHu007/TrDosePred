@@ -83,11 +83,14 @@ class TrainerTime:
 
 
 class NetworkTrainer:
-    def __init__(self, name='DoseUformer'):
+    def __init__(self, phase='train', name='DoseUformer'):
         self.log = TrainerLog()
         self.setting = TrainerSetting()
         self.time = TrainerTime()
-        self.writer = SummaryWriter(os.path.join('./runs', name))  # ./runs/name
+        assert phase in ['train', 'test']
+        self.phase = phase
+        if phase == 'train':
+            self.writer = SummaryWriter(os.path.join('./runs', name))  # ./runs/name
 
     def set_GPU_device(self, list_GPU_ids):
         self.setting.list_GPU_ids = list_GPU_ids
@@ -248,6 +251,7 @@ class NetworkTrainer:
             # self.writer.add_scalar('Loss/iter', loss.item(), self.log.iter)
 
             self.update_moving_train_loss(loss)
+            self.writer.add_scalar('lr/iter', self.setting.lr_scheduler.get_last_lr()[0], self.log.iter)
             self.update_lr()
 
             # Print delta loss during the epoch 0
