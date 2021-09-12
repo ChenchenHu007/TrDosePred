@@ -154,7 +154,7 @@ class HNC3DDataset(data.Dataset):  # a custom dataset;
 
 def get_loader(batch_size=1,
                num_samples_per_epoch=1,
-               num_works=4,
+               num_works=0,
                phase='train',
                path='../../Data/OpenKBP_C3D',
                **kwargs):
