@@ -2,7 +2,7 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from DataLoader.dataloader_DoseUformer import val_transform, read_data, pre_processing
+from DataLoader.dataloader_dose import val_transform, read_data, pre_processing
 from Evaluate.evaluate_openKBP import get_3D_Dose_dif
 
 

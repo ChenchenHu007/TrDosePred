@@ -11,7 +11,7 @@ from monai.utils import set_determinism
 if os.path.abspath('..') not in sys.path:
     sys.path.insert(0, os.path.abspath('..'))
 
-from DataLoader.dataloader_DoseUformer import get_loader
+from DataLoader.dataloader_dose import get_loader
 from NetworkTrainer.network_trainer import NetworkTrainer
 from model import DoseformerV2
 from online_evaluation import online_evaluation
