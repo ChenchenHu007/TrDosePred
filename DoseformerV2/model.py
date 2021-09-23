@@ -17,14 +17,15 @@ class SingleConv(nn.Module):
         self.single_conv = nn.Sequential(OrderedDict([
             ('conv3d', nn.Conv3d(in_channels, out_channels, kernel_size=kernel_size, padding=padding, stride=stride)),
             ('gelu', nn.GELU()),
+            ('InstanceNorm', nn.InstanceNorm3d(out_channels, affine=True)),
         ]))
-        self.layer_norm = nn.LayerNorm(out_channels)
+        # self.layer_norm = nn.LayerNorm(out_channels)
 
     def forward(self, x):
         x = self.single_conv(x)
-        x = rearrange(x, 'b c d h w -> b d h w c')
-        x = self.layer_norm(x)
-        x = rearrange(x, 'b d h w c -> b c d h w')
+        # x = rearrange(x, 'b c d h w -> b d h w c')
+        # x = self.layer_norm(x)
+        # x = rearrange(x, 'b d h w c -> b c d h w')
         return x
 
 
@@ -52,7 +53,7 @@ class PatchExpanding(nn.Module):
         self.norm = norm_layer(dim)
         self.expanding = nn.ConvTranspose3d(dim, dim // 2, kernel_size=2, stride=2)
         # self.expanding = nn.Sequential([
-        #     nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),
+        #     nn.Upsample(scale_factor=2, mode='trilinear', align_corners=True),
         #     DwSeparableConv3d(dim, dim // 2, kernel_size=3, stride=1, padding=1)
         # ])
 
@@ -115,11 +116,11 @@ class PatchMerging(nn.Module):
             self.act = nn.GELU()
             self.norm = norm_layer(dim)
             self.reduction = nn.Conv3d(dim, 2 * dim, kernel_size=2, stride=2, padding=0)
-        elif self.mode == 'interpolation':
+        elif self.mode == 'interpolation':  # slow
             self.act = nn.GELU()
             self.norm = norm_layer(dim)
             self.reduction = nn.Sequential([
-                nn.Upsample(scale_factor=0.5, mode='bilinear', align_corners=True),
+                nn.Upsample(scale_factor=0.5, mode='trilinear', align_corners=True),
                 nn.Conv3d(dim, 2 * dim, kernel_size=3, stride=1, padding=1)
             ])
 
@@ -338,11 +339,11 @@ class SwinUnet3D(nn.Module):
 
         # build encoders
         self.encoders = nn.ModuleList()
-        for i_encoder in range(self.num_layers):  # (0, 1, 2, 3)
+        for i_encoder in range(self.num_layers - 1):  # (0, 1, 2)
             layer = BasicLayer(
                 dim=int(embed_dim * 2 ** i_encoder),
-                depth=depths[i_encoder],  # (2, 2, 2, 1)
-                num_heads=num_heads[i_encoder],  # (3, 6, 12, 24)
+                depth=depths[i_encoder],  # (2, 2, 2)
+                num_heads=num_heads[i_encoder],  # (3, 6, 12)
                 window_size=window_size,
                 mlp_ratio=mlp_ratio,
                 qkv_bias=qkv_bias,
@@ -351,7 +352,7 @@ class SwinUnet3D(nn.Module):
                 attn_drop=attn_drop_rate,
                 drop_path=dpr[sum(depths[:i_encoder]):sum(depths[:i_encoder + 1])],
                 norm_layer=norm_layer,
-                downsample=PatchMerging if i_encoder < self.num_layers - 1 else None,
+                downsample=PatchMerging,
                 downsample_mode=self.downsample_mode,
                 use_checkpoint=use_checkpoint)
             self.encoders.append(layer)
@@ -361,7 +362,7 @@ class SwinUnet3D(nn.Module):
         for i_decoder in range(self.num_layers):  # (0, 1, 2, 3)
             decoder = BasicLayerUp(
                 dim=int(embed_dim * 2 ** i_decoder),
-                depth=depths[i_decoder],  # (2, 2, 2, 1)
+                depth=depths[i_decoder],  # (2, 2, 2, 3)
                 num_heads=num_heads[i_decoder],  # (3, 6, 12, 24)
                 window_size=window_size,
                 mlp_ratio=mlp_ratio,
@@ -392,6 +393,9 @@ class SwinUnet3D(nn.Module):
             layer = norm_layer(num_features[i_layer])
             layer_name = f'norm{i_layer}'
             self.add_module(layer_name, layer)
+            act = nn.GELU()
+            act_name = f'act{i_layer}'
+            self.add_module(act_name, act)
 
         if self.initialized is not None:
             print('initialized swin_unet3d by {}'.format(self.initialized))
@@ -490,7 +494,7 @@ class SwinUnet3D(nn.Module):
         x = self.pos_drop(x)
 
         outs = []
-        for i in range(self.num_layers):
+        for i in range(self.num_layers - 1):
             layer = self.encoders[i]
             # print('encoder{}: {}'.format(i, type(layer)))
             # print(layer)
@@ -521,6 +525,8 @@ class SwinUnet3D(nn.Module):
                 # # x = self.fusions[i](x)  # fusion
                 # x = rearrange(x, 'b d h w c -> b c d h w')
                 x = x + shortcut
+                act = getattr(self, f'act{2 - i}')
+                x = act(x)
             # print('decoder{}: {}'.format(i, x.shape))
 
         return x
@@ -538,9 +544,9 @@ class DoseformerV2(nn.Module):
 
         # optimization needed
         self.head = nn.Sequential(OrderedDict([
-            # ('upsampling_2', nn.Upsample(scale_factor=(1, 2, 2), mode='bilinear', align_corners=True)),
+            # ('upsampling_2', nn.Upsample(scale_factor=(2, 2, 2), mode='trilinear', align_corners=True)),
             # ('conv3x3', nn.Conv3d(num_features[0], num_features[0] // 2, kernel_size=3, stride=1, padding=1)),
-            # ('upsampling_1', nn.Upsample(scale_factor=(1, 2, 2), mode='bilinear', align_corners=True)),
+            # ('upsampling_1', nn.Upsample(scale_factor=(1, 2, 2), mode='trilinear', align_corners=True)),
             # ('conv3x3', nn.Conv3d(num_features[0] // 2, num_features[0], kernel_size=3, stride=1, padding=1)),
             ('final_expanding',
              UpConv(in_ch=num_features[0], out_ch=1, scale_factor=configs['model']['SwinUnet3D']['patch_size'])),

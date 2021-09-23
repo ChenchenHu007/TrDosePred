@@ -98,7 +98,7 @@ def main(configs):
     if configs['pre_trained']['status'] and os.path.exists(configs['pre_trained']['model_path']):
         trainer.init_trainer(ckpt_file=configs['pre_trained']['model_path'],
                              list_GPU_ids=configs['list_GPU_ids'],
-                             only_network=False)
+                             only_network=configs['pre_trained']['only_network'])
 
     trainer.run()
 
