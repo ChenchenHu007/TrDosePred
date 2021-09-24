@@ -115,14 +115,7 @@ class PatchMerging(nn.Module):
         elif self.mode == 'conv':
             self.act = nn.GELU()
             self.norm = norm_layer(dim)
-            self.reduction = nn.Conv3d(dim, 2 * dim, kernel_size=2, stride=2, padding=0)
-        elif self.mode == 'interpolation':  # slow
-            self.act = nn.GELU()
-            self.norm = norm_layer(dim)
-            self.reduction = nn.Sequential([
-                nn.Upsample(scale_factor=0.5, mode='trilinear', align_corners=True),
-                nn.Conv3d(dim, 2 * dim, kernel_size=3, stride=1, padding=1)
-            ])
+            self.reduction = nn.Conv3d(dim, 2 * dim, kernel_size=3, stride=2, padding=1)
 
     def forward(self, x):
         """ Forward function.
