@@ -101,17 +101,17 @@ class PatchMerging(nn.Module):
         elif self.mode == 'max-pooling':
             self.act = nn.GELU()
             self.norm = norm_layer(dim)
-            self.reduction = nn.Sequential([
+            self.reduction = nn.Sequential(
                 nn.MaxPool3d(kernel_size=2, stride=2),
                 nn.Conv3d(dim, 2 * dim, kernel_size=3, stride=1, padding=1)
-            ])
+            )
         elif self.mode == 'avg-pooling':
             self.act = nn.GELU()
             self.norm = norm_layer(dim)
-            self.reduction = nn.Sequential([
+            self.reduction = nn.Sequential(
                 nn.AvgPool3d(kernel_size=2, stride=2),
                 nn.Conv3d(dim, 2 * dim, kernel_size=3, stride=1, padding=1)
-            ])
+            )
         elif self.mode == 'conv':
             self.act = nn.GELU()
             self.norm = norm_layer(dim)
