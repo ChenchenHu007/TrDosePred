@@ -1,0 +1,63 @@
+# best since 09.23
+# VRAM: 9355 MB
+# time used: 7.73 h
+# Dose score: 2.5826
+# DVH score: 1.6269
+project_name: 'V4'
+output_dir: '../../Output/V4'  # new code for decoder but implementation is unchanged !
+list_GPU_ids: [ 0 ]
+
+pre_trained:
+  status: false
+  model_path: ''
+  only_network: true
+
+model:
+  SwinUnet3D:
+    pretrained: null
+    initialized: null  # (None, 'default', 'kaiming_uniform', 'kaiming_normal')
+    patch_size: [ 2, 4, 4 ]
+    conv_stem: true
+    overlapped_embed: true  # unused
+    downsample_mode: 'conv'  # ('default', 'max-pooling', 'avg-pooling', 'conv') for patch merging ## 09.25 midnight
+    in_chans: 3
+    embed_dim: 96
+    depths: [ 2, 2, 2, 3 ]  # 2, 2, 2, 1
+    num_heads: [ 3, 6, 12, 24 ]
+    window_size: [ 4, 4, 4 ]  # 4
+    mlp_ratio: 4.
+    qkv_bias: true
+    qk_scale: null
+    drop_rate: 0.
+    attn_drop_rate: 0.
+    drop_path_rate: 0.2
+    patch_norm: false
+    out_indices: [ 0, 1, 2 ]
+    frozen_stages: -1
+    use_checkpoint: false
+
+  Head:
+    initialized: null # (None, 'kaiming_uniform', 'kaiming_normal')
+
+training:
+  seed: 0
+  iterations: 100000  # max_iter
+
+  loader:
+    phase: 'train'
+    batch_size: 2
+
+  optimizer:
+    lr: 3.0E-4
+    weight_decay: 1.0E-4
+
+  lr_scheduler:
+    type: 'cosine'
+    eta_min: 1.E-7
+
+  loss:
+    type: 'MAE'  # ('MAE', 'Huber') default: MAE
+    delta: 1.  # for Huber loss
+
+testing:
+  TTA: true
