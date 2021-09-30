@@ -53,10 +53,11 @@ training:
 
   lr_scheduler:
     type: 'cosine'
+    T_max: 100000
     eta_min: 1.E-7
 
   loss:
-    type: 'MAE'  # ('MAE', 'Huber') default: MAE
+    type: 'MAE'  # ('MAE', 'Huber', 'MSE') default: MAE
     delta: 1.  # for Huber loss
 
 testing:
