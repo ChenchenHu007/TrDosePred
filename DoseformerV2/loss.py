@@ -13,6 +13,9 @@ class Loss(nn.Module):
                 self.loss = nn.HuberLoss(reduction='mean',
                                          delta=loss_configs['delta'])  # equal to SmoothL1 when delta=1.0
                 print('Loss function: Huber with delta {}'.format(loss_configs['delta']))
+            elif loss_configs['type'] == 'MSE':
+                self.loss = nn.MSELoss()
+                print('Loss function: MSE')
         else:
             self.loss = nn.L1Loss(reduction='mean')  # MAE
 
