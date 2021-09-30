@@ -67,9 +67,16 @@ def main(configs):
         lr=configs['training']['optimizer']['lr'], weight_decay=configs['training']['optimizer']['weight_decay'],
         betas=(0.9, 0.999), eps=1e-08, amsgrad=True)
 
+    # trainer.setting.optimizer = torch.optim.AdamW(trainer.setting.network.parameters(),
+    #                                               lr=configs['training']['optimizer']['lr'],
+    #                                               weight_decay=configs['training']['optimizer']['weight_decay'],
+    #                                               betas=(0.9, 0.999), eps=1e-08, amsgrad=True
+    #                                               )
+
     trainer.setting.lr_scheduler_type = configs['training']['lr_scheduler']['type']  # cosine
     trainer.setting.lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(trainer.setting.optimizer,
-                                                                              T_max=configs['training']['iterations'],
+                                                                              T_max=configs['training']['lr_scheduler'][
+                                                                                  'T_max'],
                                                                               eta_min=
                                                                               configs['training']['lr_scheduler'][
                                                                                   'eta_min'],  # 1e-7
