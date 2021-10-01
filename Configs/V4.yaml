@@ -46,6 +46,7 @@ training:
   loader:
     phase: 'train'
     batch_size: 2
+    num_samples_per_epoch: 1000 # batch_size * 500
 
   optimizer:
     lr: 3.0E-4

@@ -45,7 +45,7 @@ def main(configs):
 
     trainer.setting.train_loader = get_loader(
         batch_size=configs['training']['loader']['batch_size'],
-        num_samples_per_epoch=configs['training']['loader']['batch_size'] * 500,  # an epoch
+        num_samples_per_epoch=configs['training']['loader']['num_samples_per_epoch'],  # an epoch
         phase=configs['training']['loader']['phase'],
         num_works=2
     )
