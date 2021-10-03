@@ -537,12 +537,13 @@ class DoseformerV2(nn.Module):
 
         # optimization needed
         self.head = nn.Sequential(OrderedDict([
-            # ('upsampling_2', nn.Upsample(scale_factor=(2, 2, 2), mode='trilinear', align_corners=True)),
-            # ('conv3x3', nn.Conv3d(num_features[0], num_features[0] // 2, kernel_size=3, stride=1, padding=1)),
-            # ('upsampling_1', nn.Upsample(scale_factor=(1, 2, 2), mode='trilinear', align_corners=True)),
-            # ('conv3x3', nn.Conv3d(num_features[0] // 2, num_features[0], kernel_size=3, stride=1, padding=1)),
+            # ('upsampling_2', UpConv(in_ch=num_features[0], out_ch=num_features[0] // 2, scale_factor=(1, 2, 2))),
+            # ('conv3x3_2', SingleConv(num_features[0] // 2, num_features[0] // 2, kernel_size=3, stride=1, padding=1)),
+            # ('upsampling_1', UpConv(in_ch=num_features[0] // 2, out_ch=1, scale_factor=(2, 2, 2))),
+            # ('conv3x3_1', SingleConv(1, 1, kernel_size=3, stride=1, padding=1)),
             ('final_expanding',
              UpConv(in_ch=num_features[0], out_ch=1, scale_factor=configs['model']['SwinUnet3D']['patch_size'])),
+            ('conv3x3', nn.Conv3d(1, 1, kernel_size=3, stride=1, padding=1)),
             ('point_wise', nn.Conv3d(in_channels=1, out_channels=1, kernel_size=1))
         ]))
 
